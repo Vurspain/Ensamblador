@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CCTV - TERMINAL DE VIGILANCIA</title>
+    <meta charset="UTF-8">
+    <style>
+        
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+        body { background-color: #000; color: #d4d4d4; font-family: 'Consolas', 'Courier New', monospace; text-align: center; margin: 0; padding: 20px; }
+        .container { width: 800px; margin: 20px auto; border: 2px solid #ffffff; box-shadow: 0 0 20px #ffffff, inset 0 0 15px #ffffff; padding: 10px 20px 20px 20px; background-color: #0a0a0a; border-radius: 4px; }
+        h1, h2 { text-transform: uppercase; letter-spacing: 3px; color: #FFF; border-bottom: 1px dashed #FFF; padding-bottom: 5px; }
+        .box { border: 1px solid #444; padding: 15px; margin: 20px 0; text-align: left; }
+        h2 { font-size: 1.2em; text-align: center; }
+        img { border: 1px solid #888; width: 640px; height: 480px; margin-top: 10px; background-color: #111; }
+        .btn { background-color: #222; color: #FFF; border: 1px solid #FFF; padding: 10px 20px; font-family: inherit; text-transform: uppercase; cursor: pointer; margin: 5px; font-size: 1em; transition: background-color 0.2s, color 0.2s; }
+        .btn:hover { background-color: #FFF; color: #000; }
+        .btn-green { border-color: #0F0; color: #0F0; }
+        .btn-green:hover { background-color: #0F0; color: #000; }
+        input[type=text] { background-color: #111; border: 1px solid #FFF; color: #FFF; padding: 10px; font-family: inherit; width: 50%; font-size: 1em; }
+        #status, #train_status { margin-top: 15px; font-style: italic; color: #888; }
+        #status::after { content: '_'; animation: blink 1s infinite; }
+        p { line-height: 1.6; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>[ CAMARA ] - TERMINAL DE VIGILANCIA</h1>
+        
+        <div class="box">
+            <h2>[ CAMARA 1 ]</h2>
+            <div style="text-align: center;">
+                <img src="/video" width="640" height="480">
+                <br>
+                <p id="status">ESTADO: INACTIVO</p>
+            </div>
+        </div>
+
+        <div class="box">
+            <h2>[ PANEL DE CONTROL ]</h2>
+            <p>> Seleccione una operación.</p>
+            
+            <button class="btn btn-green" onclick="setMode('detection')">[ INICIAR MODO DETECCIÓN ]</button>
+            <button class="btn" onclick="setMode('inactive')">[ DETENER OPERACIÓN ]</button>
+            
+            <hr style="border-color: #444; border-style: dashed; margin: 20px 0;">
+
+            <p>> O registre nuevos rostros.</p>
+            <input type="text" id="person_name" placeholder="Nombre (ej. carlos, marcos...)" onkeyup="checkName()">
+            <button class="btn" id="btn_capture" onclick="startCapture()" disabled>[ INICIAR MODO CAPTURA ]</button>
+            
+            <p id="train_status"></p>
+        </div>
+    </div>
+
+    <script>
+        // Revisa si hay texto en el input para habilitar el botón
+        function checkName() {
+            let name = document.getElementById('person_name').value;
+            document.getElementById('btn_capture').disabled = (name.length === 0);
+        }
+
+        // Función general para cambiar de modo
+        function setMode(mode) {
+            fetch('/set_mode/' + mode)
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('status').innerText = 'ESTADO: ' + data.new_mode.toUpperCase();
+                });
+        }
+
+        // Función especial para iniciar la captura
+        function startCapture() {
+            let name = document.getElementById('person_name').value;
+            if (!name) return; // Doble chequeo
+
+            document.getElementById('status').innerText = 'ESTADO: INICIANDO CAPTURA...';
+            
+            fetch('/start_capture', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-form-urlencoded' },
+                body: `name=${name}` 
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('person_name').value = '';
+                document.getElementById('btn_capture').disabled = true;
+                // El sondeo de estado se encargará del resto
+            });
+        }
+
+        // Sondeo de estado (Polling) para mensajes de captura y entrenamiento
+        function pollStatus() {
+            fetch('/get_status')
+                .then(response => response.json())
+                .then(data => {
+                    let trainStatus = document.getElementById('train_status');
+                    
+                    // Actualiza el estado principal si es "training"
+                    if (data.mode === 'training' || data.mode === 'capture') {
+                         document.getElementById('status').innerText = 'ESTADO: ' + data.mode.toUpperCase();
+                    }
+                    
+                    // Muestra mensajes de estado detallados
+                    if (data.message) {
+                        trainStatus.innerText = `> ESTADO: ${data.message}`;
+                    } else {
+                        trainStatus.innerText = "";
+                    }
+                })
+                .finally(() => {
+                    setTimeout(pollStatus, 2000);
+                });
+        }
+
+        document.addEventListener("DOMContentLoaded", pollStatus);
+    </script>
+</body>
+</html>
