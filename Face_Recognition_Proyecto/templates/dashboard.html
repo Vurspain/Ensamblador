@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>VIGILANCIA - TERMINAL DE SITIO</title>
+    <meta charset="UTF-8">
+    <style>
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+        body { background-color: #000; color: #d4d4d4; font-family: 'Consolas', 'Courier New', monospace; text-align: center; margin: 0; padding: 20px; }
+        
+        .container { width: 800px; margin: 20px auto; border: 2px solid #ffffff; box-shadow: 0 0 20px #ffffff, inset 0 0 15px #ffffff; padding: 10px 20px 20px 20px; background-color: #0a0a0a; border-radius: 4px; }
+        
+        h1, h2 { text-transform: uppercase; letter-spacing: 3px; color: #FFF; border-bottom: 1px dashed #FFF; padding-bottom: 5px; }
+        h2 { font-size: 1.2em; text-align: center; }
+        
+        .box { border: 1px solid #444; padding: 15px; margin: 20px 0; text-align: left; }
+        
+        img { border: 1px solid #888; width: 640px; height: 480px; margin-top: 10px; background-color: #111; }
+        
+        /* Botones */
+        .btn { background-color: #222; color: #FFF; border: 1px solid #FFF; padding: 10px 20px; font-family: inherit; text-transform: uppercase; cursor: pointer; margin: 5px; font-size: 1em; transition: background-color 0.2s, color 0.2s; }
+        .btn:hover { background-color: #FFF; color: #000; }
+        .btn-green { border-color: #0F0; color: #0F0; }
+        .btn-green:hover { background-color: #0F0; color: #000; }
+        .btn-orange { border-color: #ffa500; color: #ffa500; }
+        .btn-orange:hover { background-color: #ffa500; color: #000; }
+        
+        input[type=text] { background-color: #111; border: 1px solid #FFF; color: #FFF; padding: 10px; font-family: inherit; width: 50%; font-size: 1em; }
+        
+        #status, #train_status { margin-top: 15px; font-style: italic; color: #888; }
+        #status::after { content: '_'; animation: blink 1s infinite; }
+        p { line-height: 1.6; }
+
+        /* Tablas y listas */
+        #events-container, #users-list-container { display: none; margin-top: 20px; border-top: 1px dashed #555; padding-top: 10px; }
+        
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.9em; }
+        th, td { border: 1px solid #555; padding: 8px; text-align: left; }
+        th { background-color: #222; color: #fff; text-transform: uppercase; }
+        tr:nth-child(even) { background-color: #111; }
+        tr:hover { background-color: #333; }
+        
+        .alert-yes { color: #f00; font-weight: bold; }
+        .alert-no { color: #0f0; }
+        .user-item { padding: 5px; border-bottom: 1px dotted #444; color: #aaa; }
+        .user-item:hover { color: #fff; background-color: #222; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>CAMARA DE VIGILANCIA - TERMINAL DE SITIO</h1>
+        
+        <div class="box">
+            <h2>[ CAMARA DE VIGILANCIA PRIMARIA ]</h2>
+            <div style="text-align: center;">
+                <img src="/video" width="640" height="480">
+                <br>
+                <p id="status">ESTADO: INACTIVO</p>
+                <p style="font-size: 0.8em; color: #666;">[CONTROLES MANUALES: Flechas IZQ/DER para mover, C para centrar]</p>
+            </div>
+        </div>
+
+        <div class="box">
+            <h2>[ PANEL DE CONTROL ]</h2>
+            <p>> Seleccione una operación.</p>
+            
+            <button class="btn btn-green" onclick="setMode('detection')">[ INICIAR MODO DETECCIÓN ]</button>
+            <button class="btn btn-orange" onclick="setMode('patrol')">[ INICIAR MODO PATRULLA ]</button>
+            
+            <button class="btn" onclick="setMode('inactive')">[ DETENER OPERACIÓN ]</button>
+            
+            <br><br>
+            <button class="btn" onclick="toggleEventsTable()">[ REGISTRO DE EVENTOS ]</button>
+            
+            <div id="events-container">
+                <h3>>> REGISTRO DE ACCESOS RECIENTES</h3>
+                <table id="events-table">
+                    <thead>
+                        <tr><th>HORA</th><th>PERSONA</th><th>TIPO</th><th>ALERTA</th></tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+
+            <hr style="border-color: #444; border-style: dashed; margin: 20px 0;">
+
+            <p>> Gestión de Persona.</p>
+            <input type="text" id="person_name" placeholder="Designación (ej. carlos, marcos, valeria...)" onkeyup="checkName()">
+            <button class="btn" id="btn_capture" onclick="startCapture()" disabled>[ REGISTRAR PERSONA ]</button>
+            
+            <br><br>
+            <button class="btn" onclick="toggleUsersList()">[ VER REGISTRO DE PERSONAL ]</button>
+
+            <div id="users-list-container">
+                <h3>>> PERSONAL ACTIVO EN BASE DE DATOS</h3>
+                <div id="users-list-content" style="text-align: left; column-count: 2;"></div>
+            </div>
+            
+            <p id="train_status"></p>
+        </div>
+    </div>
+
+    <script>
+        let eventsInterval = null;
+
+        function checkName() {
+            let name = document.getElementById('person_name').value;
+            document.getElementById('btn_capture').disabled = (name.length === 0);
+        }
+
+        function setMode(mode) {
+            fetch('/set_mode/' + mode)
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('status').innerText = 'ESTADO: ' + data.new_mode.toUpperCase();
+                });
+        }
+
+        function startCapture() {
+            let name = document.getElementById('person_name').value;
+            if (!name) return;
+
+            document.getElementById('status').innerText = 'ESTADO: INICIANDO CAPTURA...';
+            
+            fetch('/start_capture', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'name=' + encodeURIComponent(name)
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('person_name').value = '';
+                document.getElementById('btn_capture').disabled = true;
+            });
+        }
+
+        function pollStatus() {
+            fetch('/get_status')
+                .then(response => response.json())
+                .then(data => {
+                    let trainStatus = document.getElementById('train_status');
+                    if (data.mode === 'training' || data.mode === 'capture') {
+                         document.getElementById('status').innerText = 'ESTADO: ' + data.mode.toUpperCase();
+                    }
+                    if (data.message) {
+                        trainStatus.innerText = `> ESTADO: ${data.message}`;
+                    } else {
+                        trainStatus.innerText = "";
+                    }
+                })
+                .finally(() => {
+                    setTimeout(pollStatus, 2000);
+                });
+        }
+
+        // CONTROL DE TECLADO PARA SERVO
+        document.addEventListener('keydown', function(event) {
+            if(["ArrowLeft", "ArrowRight"].indexOf(event.code) > -1) {
+                event.preventDefault();
+            }
+            if (event.key === "ArrowLeft") {
+                fetch('/move_servo/left');
+            } else if (event.key === "ArrowRight") {
+                fetch('/move_servo/right');
+            } else if (event.key === "c" || event.key === "C") {
+                fetch('/move_servo/center');
+            }
+        });
+
+        function toggleEventsTable() {
+            let container = document.getElementById('events-container');
+            document.getElementById('users-list-container').style.display = 'none'; 
+
+            if (container.style.display === 'none' || container.style.display === '') {
+                container.style.display = 'block';
+                updateEventsTable();
+                if (!eventsInterval) eventsInterval = setInterval(updateEventsTable, 5000);
+            } else {
+                container.style.display = 'none';
+                if (eventsInterval) { clearInterval(eventsInterval); eventsInterval = null; }
+            }
+        }
+
+        function updateEventsTable() {
+            fetch('/api/eventos')
+                .then(response => response.json())
+                .then(data => {
+                    let tbody = document.querySelector("#events-table tbody");
+                    tbody.innerHTML = ""; 
+                    data.forEach(event => {
+                        let row = document.createElement("tr");
+                        let alertClass = event.alerta === "SI" ? "alert-yes" : "alert-no";
+                        row.innerHTML = `<td>${event.timestamp}</td><td>${event.nombre}</td><td>${event.tipo}</td><td class="${alertClass}">${event.alerta}</td>`;
+                        tbody.appendChild(row);
+                    });
+                });
+        }
+
+        function toggleUsersList() {
+            let container = document.getElementById('users-list-container');
+            document.getElementById('events-container').style.display = 'none';
+            if (eventsInterval) { clearInterval(eventsInterval); eventsInterval = null; }
+
+            if (container.style.display === 'none' || container.style.display === '') {
+                container.style.display = 'block';
+                fetch('/api/registrados')
+                    .then(res => res.json())
+                    .then(names => {
+                        let contentDiv = document.getElementById('users-list-content');
+                        contentDiv.innerHTML = '';
+                        if (names.length === 0) {
+                            contentDiv.innerHTML = '<p>> BASE DE DATOS VACÍA.</p>';
+                            return;
+                        }
+                        names.forEach(name => {
+                            contentDiv.innerHTML += `<div class="user-item">> SUJETO: ${name.toUpperCase()}</div>`;
+                        });
+                    });
+            } else {
+                container.style.display = 'none';
+            }
+        }
+
+        document.addEventListener("DOMContentLoaded", pollStatus);
+    </script>
+</body>
+</html>
