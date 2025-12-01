@@ -1,0 +1,1 @@
+Codigo fuente del proyecto del sistema operativo, tomado de la practica de teams adaptador por el equipo para usar pantalla LCD.
