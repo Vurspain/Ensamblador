@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SISTEMA INTEGRAL DE SEGURIDAD</title>
+    <style>
+        body { background: #111; color: #eee; font-family: monospace; text-align: center; margin: 0; }
+        
+        /* BARRA SUPERIOR (SELECTOR DE SISTEMA) */
+        .top-bar { background: #222; padding: 15px; border-bottom: 2px solid #444; }
+        .sys-btn { padding: 10px 30px; font-size: 1.2em; cursor: pointer; border: 2px solid #555; background: #000; color: #888; margin: 0 10px; font-weight: bold; }
+        .sys-btn:hover { border-color: #fff; color: #fff; }
+        .active-face { border-color: #0f0; color: #0f0; background: #002200; }
+        .active-obj { border-color: #0af; color: #0af; background: #001122; }
+        .active-off { border-color: #f00; color: #f00; }
+
+        /* CONTENEDOR PRINCIPAL */
+        .main-container { display: flex; justify-content: center; padding: 20px; flex-wrap: wrap; }
+        .video-box { border: 2px solid #444; padding: 5px; background: #000; }
+        .controls-box { width: 350px; margin-left: 20px; text-align: left; background: #1a1a1a; padding: 20px; border-radius: 8px; border: 1px solid #333; }
+
+        /* PANELES DE CONTROL (SE OCULTAN/MUESTRAN) */
+        .control-panel { display: none; } 
+        .active-panel { display: block; }
+
+        h2 { border-bottom: 1px dashed #666; padding-bottom: 5px; margin-top: 0; }
+        button { width: 100%; padding: 10px; margin: 5px 0; cursor: pointer; font-weight: bold; }
+        
+        .btn-green { background: #060; color: #fff; border: none; }
+        .btn-blue { background: #004488; color: #fff; border: none; }
+        .btn-red { background: #600; color: #fff; border: none; }
+        
+        .log-box { height: 150px; overflow-y: scroll; background: #000; border: 1px solid #444; padding: 5px; font-size: 0.8em; margin-top: 10px; color: #0f0; }
+    </style>
+</head>
+<body>
+
+    <div class="top-bar">
+        <button class="sys-btn" id="btn-face" onclick="setSystem('FACE_REC')">SISTEMA 1: ROSTROS</button>
+        <button class="sys-btn" id="btn-obj" onclick="setSystem('OBJECT_SEC')">SISTEMA 2: OBJETOS</button>
+        <button class="sys-btn" id="btn-off" onclick="setSystem('INACTIVE')">APAGAR SISTEMAS</button>
+    </div>
+
+    <div class="main-container">
+        <div class="video-box">
+            <img src="/video_feed" width="640" height="480">
+            <p style="color:#666">[TECLADO: Flechas para mover cámara]</p>
+        </div>
+
+        <div class="controls-box">
+            
+            <div id="panel-face" class="control-panel">
+                <h2 style="color:#0f0">CONTROL DE ACCESO</h2>
+                <button class="btn-green" onclick="togglePatrol()">[ ACTIVAR PATRULLAJE ]</button>
+                <hr>
+                <p>Registrar Nuevo Usuario:</p>
+                <input type="text" id="face_name" placeholder="Nombre..." style="width:70%">
+                <button class="btn-blue" style="width:25%" onclick="captureFace()">FOTO</button>
+                
+                <h3>Últimos Accesos:</h3>
+                <div id="face-log" class="log-box"></div>
+            </div>
+
+            <div id="panel-obj" class="control-panel">
+                <h2 style="color:#0af">SEGURIDAD DE ACTIVOS</h2>
+                <button class="btn-blue" onclick="armObjects()">[ ARMAR / CALIBRAR ]</button>
+                <button class="btn-red" onclick="disarmObjects()">[ DESARMAR ]</button>
+                
+                <h3>Bitácora de Seguridad:</h3>
+                <div id="obj-log" class="log-box" style="color:#0af"></div>
+            </div>
+
+            <div id="panel-off" class="control-panel active-panel">
+                <h2 style="color:#777">SISTEMA EN ESPERA</h2>
+                <p>Seleccione un modo en la barra superior para iniciar.</p>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // --- CAMBIO DE MODO ---
+        function setSystem(mode) {
+            // Estilos botones superiores
+            document.querySelectorAll('.sys-btn').forEach(b => b.className = 'sys-btn');
+            if(mode === 'FACE_REC') document.getElementById('btn-face').classList.add('active-face');
+            if(mode === 'OBJECT_SEC') document.getElementById('btn-obj').classList.add('active-obj');
+            if(mode === 'INACTIVE') document.getElementById('btn-off').classList.add('active-off');
+
+            // Mostrar paneles
+            document.querySelectorAll('.control-panel').forEach(p => p.classList.remove('active-panel'));
+            if(mode === 'FACE_REC') document.getElementById('panel-face').classList.add('active-panel');
+            if(mode === 'OBJECT_SEC') document.getElementById('panel-obj').classList.add('active-panel');
+            if(mode === 'INACTIVE') document.getElementById('panel-off').classList.add('active-panel');
+
+            // Llamar al servidor
+            fetch('/set_system/' + mode);
+        }
+
+        // --- FUNCIONES ROSTROS ---
+        function togglePatrol() { fetch('/toggle_patrol'); }
+        function captureFace() {
+            let name = document.getElementById('face_name').value;
+            if(!name) return alert("Escribe un nombre");
+            fetch('/start_capture', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: 'name=' + encodeURIComponent(name)
+            });
+        }
+
+        // --- FUNCIONES OBJETOS ---
+        function armObjects() { fetch('/arm_objects').then(r=>r.json()).then(d => alert("Armado: " + d.objects)); }
+        function disarmObjects() { fetch('/disarm_objects'); }
+
+        // --- ACTUALIZACIÓN DE LOGS (POLLING) ---
+        setInterval(() => {
+            // Si el panel de rostros es visible, pedir logs de rostros
+            if(document.getElementById('panel-face').classList.contains('active-panel')) {
+                fetch('/api/eventos').then(r=>r.json()).then(data => {
+                    let html = "";
+                    data.forEach(e => html += `<div>${e.time} - ${e.name}</div>`);
+                    document.getElementById('face-log').innerHTML = html;
+                });
+            }
+            // Si el panel de objetos es visible, pedir logs de objetos
+            if(document.getElementById('panel-obj').classList.contains('active-panel')) {
+                fetch('/get_object_alerts').then(r=>r.json()).then(data => {
+                    let html = "";
+                    [...data].reverse().forEach(log => html += `<div>> ${log}</div>`);
+                    document.getElementById('obj-log').innerHTML = html;
+                });
+            }
+        }, 2000);
+
+        // --- CONTROL TECLADO ---
+        document.addEventListener('keydown', e => {
+            if(["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"].includes(e.key)) e.preventDefault();
+            if(e.key==="ArrowLeft") fetch('/move_servo/pan/left');
+            if(e.key==="ArrowRight") fetch('/move_servo/pan/right');
+            if(e.key==="ArrowUp") fetch('/move_servo/tilt/up');
+            if(e.key==="ArrowDown") fetch('/move_servo/tilt/down');
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Último Desconocido</title>
+</head>
+<body style="background:#111; color:white; text-align:center;">
+    <h1>Último desconocido detectado</h1>
+
+    {% if imagen %}
+        <img src="{{ imagen }}" style="width:80%; border:3px solid red; margin-top:20px;">
+    {% else %}
+        <p>No hay imágenes registradas aún.</p>
+    {% endif %}
+
+</body>
+</html>
